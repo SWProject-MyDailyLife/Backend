@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session, send_from_directory, send_file
+from flask import Flask, request, jsonify, session, send_file
 from flask_bcrypt import Bcrypt
 from pymongo import MongoClient
 from bson.objectid import ObjectId
@@ -7,11 +7,13 @@ from flask_cors import CORS
 import os
 import io
 import gridfs
+from flask_session import Session
+import redis
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 bcrypt = Bcrypt(app)
-CORS(app)
+CORS(app, supports_credentials=True, origins=["http://localhost:3000"])
 
 client = MongoClient('mongodb+srv://bsb1203:qxzdozhOGmOFUdLN@cluster0.cj1vuyu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
 db = client['Photo_Diary']
@@ -51,9 +53,22 @@ def login():
     user = users_collection.find_one({"user_id": data['user_id']})
     if user and bcrypt.check_password_hash(user['password'], data['password']):
         session['user_id'] = user['user_id']
-        return jsonify({"message": "Login successful"}), 200
+        print(f"User {user['user_id']} logged in, session: {session['user_id']}")  # 로그 출력
+        return jsonify({"message": "Login successful", "user_id": user['user_id'], "sesson_id": session['user_id']}), 200
     else:
         return jsonify({"message": "Invalid credentials"}), 401
+
+############테스트
+# 로그인
+# @app.route('/api/login', methods=['POST'])
+# def login():
+#     data = request.get_json()
+#     user = users_collection.find_one({"user_id": data['user_id']})
+#     if user and bcrypt.check_password_hash(user['password'], data['password']):
+#         session['user_id'] = user['user_id']
+#         return jsonify({"message": "Login successful", "user_id": user['user_id'], "session_id": session['user_id']}), 200
+#     else:
+#         return jsonify({"message": "Invalid credentials"}), 401
 
 # 로그아웃
 @app.route('/api/logout', methods=['POST'])
@@ -67,16 +82,48 @@ def get_users():
     users = list(users_collection.find({}, {"_id": 0, "user_id": 1}))
     return jsonify(users), 200
 
+#######################
+# 사용자 사진 조회 (로그인 사용자만)
+# @app.route('/api/photos', methods=['GET'])
+# def get_photos():
+#     user_id = request.headers.get('user_id')
+#     session = request.headers.get('session_id')
+#     print(f"user ID from request: {user_id}")
+#     print(f"Session ID from request: {session}")
+#     print(session)
+    
+#     if not user_id:
+#         return jsonify({"message": "Unauthorized access"}), 401
+    
+#     photos = list(photos_collection.find({}, {"_id": 1, "photo_url": 1, "description": 1, "keywords": 1, "user_id": 1}))
+#     for photo in photos:
+#         photo['_id'] = str(photo['_id'])
+#         if 'keywords' not in photo or not isinstance(photo['keywords'], list):
+#             photo['keywords'] = []
+#     return jsonify(photos), 200
+
 # 사용자 사진 조회 (로그인 사용자만)
 @app.route('/api/photos', methods=['GET'])
 def get_photos():
-    if 'user_id' not in session:
+    # user_id = session.get('user_id')
+    # print(session)
+    # session_id = request.headers.get('Session-Id')
+    # print(f"Session ID from request: {session_id}")
+    user_id = request.headers.get('user_id')
+    print(f"Session ID from request: {user_id}")
+    print(session)
+    # user_id = session.get('user_id')
+    
+    if not user_id:
+    # if 'user_id' not in session:
         return jsonify({"message": "Unauthorized access"}), 401
     
     photos = list(photos_collection.find({}, {"_id": 1, "photo_url": 1, "description": 1, "keywords": 1, "user_id": 1}))
-    # ObjectId를 문자열로 변환
     for photo in photos:
         photo['_id'] = str(photo['_id'])
+        # keywords 필드가 배열인지 확인하고, 아니라면 빈 배열로 초기화
+        if 'keywords' not in photo or not isinstance(photo['keywords'], list):
+            photo['keywords'] = []
     return jsonify(photos), 200
 
 # 사진 업로드 (로그인 사용자만)
@@ -158,21 +205,6 @@ def update_photo(photo_id):
     )
     return jsonify({"message": "Photo updated successfully"}), 200
 
-# # 업로드된 모든 사진 삭제 (테스트용)
-# @app.route('/api/photos/delete_all', methods=['DELETE'])
-# def delete_all_photos():
-#     if 'user_id' not in session:
-#         return jsonify({"message": "Unauthorized access"}), 401
-
-#     # DB에서 모든 사진 삭제
-#     photos = photos_collection.find({})
-#     for photo in photos:
-#         if 'file_id' in photo:
-#             fs.delete(photo['file_id'])
-#     photos_collection.delete_many({})
-    
-#     return jsonify({"message": "All photos deleted successfully"}), 200
-
 # 메시지 전송 (로그인 사용자만)
 @app.route('/api/messages', methods=['POST'])
 def send_message():
@@ -216,27 +248,5 @@ def delete_message(message_id):
     else:
         return jsonify({"message": "Message not found or unauthorized"}), 404
 
-# 메시지 답장 (로그인 사용자만)
-@app.route('/api/messages/<message_id>', methods=['POST'])
-def reply_message(message_id):
-    if 'user_id' not in session:
-        return jsonify({"message": "Unauthorized access"}), 401
-
-    original_message = messages_collection.find_one({"_id": ObjectId(message_id), "to_user_id": session['user_id']})
-    if not original_message:
-        return jsonify({"message": "Message not found or unauthorized"}), 404
-
-    data = request.get_json()
-    reply = {
-        "from_user_id": session['user_id'],
-        "to_user_id": original_message['from_user_id'],
-        "photo_id": original_message['photo_id'],
-        "message": data['message'],
-        "created_at": datetime.datetime.now(),
-        "updated_at": datetime.datetime.now()
-    }
-    messages_collection.insert_one(reply)
-    return jsonify({"message": "Reply sent successfully"}), 201
-
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000)
+    app.run(debug=True)
