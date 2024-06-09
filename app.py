@@ -120,6 +120,44 @@ def get_photo(photo_id):
 
     return send_file(io.BytesIO(image_data.read()), mimetype=image_data.content_type, download_name=image_data.filename)
 
+# 키워드로 사진 검색
+@app.route('/api/photos/search', methods=['GET'])
+def search_photos():
+    keyword = request.args.get('keyword')
+    if not keyword:
+        return jsonify({"message": "Keyword is required"}), 400
+
+    photos = list(photos_collection.find({"keywords": {"$regex": keyword, "$options": "i"}}, {"_id": 1, "description": 1, "keywords": 1, "user_id": 1}))
+    
+    results = []
+    for photo in photos:
+        photo_id = photo['_id']
+        results.append({
+            "_id": str(photo_id),
+            "description": photo['description'],
+            "keywords": photo['keywords'],
+            "user_id": photo['user_id']
+        })
+    return jsonify(results), 200
+
+# 사진 수정 (로그인 사용자만)
+@app.route('/api/photos/<photo_id>', methods=['PUT'])
+def update_photo(photo_id):
+    if 'user_id' not in session:
+        return jsonify({"message": "Unauthorized access"}), 401
+
+    data = request.get_json()
+    photo = photos_collection.find_one({"_id": ObjectId(photo_id), "user_id": session['user_id']})
+    
+    if not photo:
+        return jsonify({"message": "Photo not found or unauthorized"}), 404
+
+    photos_collection.update_one(
+        {"_id": ObjectId(photo_id)},
+        {"$set": {"description": data['description'], "keywords": data['keywords'], "updated_at": datetime.datetime.now()}}
+    )
+    return jsonify({"message": "Photo updated successfully"}), 200
+
 # # 업로드된 모든 사진 삭제 (테스트용)
 # @app.route('/api/photos/delete_all', methods=['DELETE'])
 # def delete_all_photos():
