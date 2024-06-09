@@ -1,9 +1,12 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, send_from_directory, send_file
 from flask_bcrypt import Bcrypt
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 import datetime
 from flask_cors import CORS
+import os
+import io
+import gridfs
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
@@ -16,6 +19,11 @@ db = client['Photo_Diary']
 users_collection = db['users']
 photos_collection = db['photos']
 messages_collection = db['messages']
+fs = gridfs.GridFS(db)
+
+# Ensure the images directory exists
+if not os.path.exists('images'):
+    os.makedirs('images')
 
 # 회원 가입
 @app.route('/api/signup', methods=['POST'])
@@ -71,74 +79,61 @@ def get_photos():
         photo['_id'] = str(photo['_id'])
     return jsonify(photos), 200
 
-# 사용자 목록 및 사진 조회 (로그인 사용자만)
-@app.route('/api/main', methods=['GET'])
-def get_users_and_photos_messages():
-    if 'user_id' not in session:
-        return jsonify({"message": "Unauthorized access"}), 401
-
-    users = list(users_collection.find({}, {"_id": 0, "user_id": 1}))
-    photos = list(photos_collection.find({}, {"_id": 1, "photo_url": 1, "description": 1, "keywords": 1, "user_id": 1}))
-    messages = list(messages_collection.find({"to_user_id": session['user_id']}, {"_id": 1, "from_user_id": 1, "photo_id": 1, "message": 1, "created_at": 1}))
-    # ObjectId를 문자열로 변환
-    for photo in photos:
-        photo['_id'] = str(photo['_id'])
-    
-    result = {
-        "users": users,
-        "photos": photos,
-        "messages": messages
-    }
-    return jsonify(result), 200
-
 # 사진 업로드 (로그인 사용자만)
 @app.route('/api/photos', methods=['POST'])
 def upload_photo():
     if 'user_id' not in session:
         return jsonify({"message": "Unauthorized access"}), 401
 
-    data = request.get_json()
+    description = request.form["description"]
+    keyword = request.form["keyword"]
+    image = request.files["image"]
+
+    # 이미지 파일을 GridFS에 저장
+    fs_id = fs.put(image, filename=image.filename, content_type=image.content_type)
+
+    # DB에 저장
     photo = {
         "user_id": session['user_id'],
-        "photo_url": data['photo_url'],
-        "description": data['description'],
-        "keywords": data['keywords'],
+        "description": description,
+        "keywords": keyword,
+        "file_id": fs_id,
         "created_at": datetime.datetime.now(),
         "updated_at": datetime.datetime.now()
     }
-    photos_collection.insert_one(photo)
-    return jsonify({"message": "Photo uploaded successfully"}), 201
+    photo_id = photos_collection.insert_one(photo).inserted_id
 
-# 사진 수정 (로그인 사용자만)
-@app.route('/api/photos/<photo_id>', methods=['PUT'])
-def update_photo(photo_id):
+    return jsonify({"message": "Photo uploaded successfully", "photo_id": str(photo_id)}), 201
+
+# photo_id로 이미지 파일 제공
+@app.route('/api/photo/<photo_id>', methods=['GET'])
+def get_photo(photo_id):
     if 'user_id' not in session:
         return jsonify({"message": "Unauthorized access"}), 401
-
-    data = request.get_json()
-    photo = photos_collection.find_one({"_id": ObjectId(photo_id), "user_id": session['user_id']})
     
+    photo = photos_collection.find_one({"_id": ObjectId(photo_id)})
     if not photo:
-        return jsonify({"message": "Photo not found or unauthorized"}), 404
+        return jsonify({"message": "Photo not found"}), 404
 
-    photos_collection.update_one(
-        {"_id": ObjectId(photo_id)},
-        {"$set": {"description": data['description'], "keywords": data['keywords'], "updated_at": datetime.datetime.now()}}
-    )
-    return jsonify({"message": "Photo updated successfully"}), 200
+    file_id = photo['file_id']
+    image_data = fs.get(file_id)
 
-# 키워드로 사진 검색
-@app.route('/api/photos/search', methods=['GET'])
-def search_photos():
-    keyword = request.args.get('keyword')
-    if not keyword:
-        return jsonify({"message": "Keyword is required"}), 400
+    return send_file(io.BytesIO(image_data.read()), mimetype=image_data.content_type, download_name=image_data.filename)
 
-    photos = list(photos_collection.find({"keywords": {"$in": [keyword]}}, {"_id": 1, "photo_url": 1, "description": 1, "keywords": 1, "user_id": 1}))
-    # ObjectId를 문자열로 변환
-    for photo in photos:
-        photo['_id'] = str(photo['_id'])
-    return jsonify(photos), 200
+# # 업로드된 모든 사진 삭제 (테스트용)
+# @app.route('/api/photos/delete_all', methods=['DELETE'])
+# def delete_all_photos():
+#     if 'user_id' not in session:
+#         return jsonify({"message": "Unauthorized access"}), 401
+
+#     # DB에서 모든 사진 삭제
+#     photos = photos_collection.find({})
+#     for photo in photos:
+#         if 'file_id' in photo:
+#             fs.delete(photo['file_id'])
+#     photos_collection.delete_many({})
+    
+#     return jsonify({"message": "All photos deleted successfully"}), 200
 
 # 메시지 전송 (로그인 사용자만)
 @app.route('/api/messages', methods=['POST'])
