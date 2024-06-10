@@ -138,8 +138,6 @@ def get_photos():
     for photo in photos:
         photo_data = {
             "_id": str(photo["_id"]),
-            "photo_url": photo.get("photo_url"),
-            "description": photo.get("description"),
             "keywords": photo.get("keywords", []),
             "user_id": photo.get("user_id")
         }
