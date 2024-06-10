@@ -33,6 +33,8 @@ photos_collection = db['photos']
 messages_collection = db['messages']
 fs = gridfs.GridFS(db)
 
+access_type = 'args'
+
 # Ensure the images directory exists
 if not os.path.exists('images'):
     os.makedirs('images')
@@ -92,25 +94,16 @@ def get_users():
     users = list(users_collection.find({}, {"_id": 0, "user_id": 1}))
     return jsonify(users), 200
 
-#######################
-# 사용자 사진 조회 (로그인 사용자만)
-# @app.route('/api/photos', methods=['GET'])
-# def get_photos():
-#     user_id = request.headers.get('user_id')
-#     session = request.headers.get('session_id')
-#     print(f"user ID from request: {user_id}")
-#     print(f"Session ID from request: {session}")
-#     print(session)
+def signIn_as(arg):
+    if(arg == 'args'):
+        return request.args.get('user_id')
     
-#     if not user_id:
-#         return jsonify({"message": "Unauthorized access"}), 401
+    if(arg == 'session'):
+        return session.get('user_id')
     
-#     photos = list(photos_collection.find({}, {"_id": 1, "photo_url": 1, "description": 1, "keywords": 1, "user_id": 1}))
-#     for photo in photos:
-#         photo['_id'] = str(photo['_id'])
-#         if 'keywords' not in photo or not isinstance(photo['keywords'], list):
-#             photo['keywords'] = []
-#     return jsonify(photos), 200
+    if(arg == 'header'):
+        return request.headers.get('user_id')
+    
 
 # 사용자 사진 조회 (로그인 사용자만)
 @app.route('/api/photos', methods=['GET'])
@@ -121,7 +114,8 @@ def get_photos():
     # session_id = request.headers.get('Session-Id')
     # print(f"Session ID from request: {session_id}")
     # print(request.headers)
-    user_id = request.headers.get('user_id')
+    # user_id = request.headers.get('user_id')
+    user_id = signIn_as(access_type)
     print(f"user ID from request: {user_id}")
     # print(session)
     # user_id = session.get('user_id')
@@ -138,6 +132,8 @@ def get_photos():
     for photo in photos:
         photo_data = {
             "_id": str(photo["_id"]),
+            "photo_url": photo.get("photo_url"),
+            "description": photo.get("description"),
             "keywords": photo.get("keywords", []),
             "user_id": photo.get("user_id")
         }
@@ -152,10 +148,13 @@ def get_photos():
 # 사진 업로드 (로그인 사용자만)
 @app.route('/api/photos', methods=['POST'])
 def upload_photo():
-    if 'user_id' not in session:
-        return jsonify({"message": "Unauthorized access"}), 401
+    user_id = signIn_as(access_type)
 
-    description = request.form["description"]
+    if not user_id:
+        return jsonify({"message": "Unauthorized access"}), 401
+    # if 'user_id' not in session:
+    #     return jsonify({"message": "Unauthorized access"}), 401
+
     keyword = request.form["keyword"]
     image = request.files["image"]
 
@@ -165,7 +164,6 @@ def upload_photo():
     # DB에 저장
     photo = {
         "user_id": session['user_id'],
-        "description": description,
         "keywords": keyword,
         "file_id": fs_id,
         "created_at": datetime.datetime.now(),
@@ -176,19 +174,19 @@ def upload_photo():
     return jsonify({"message": "Photo uploaded successfully", "photo_id": str(photo_id)}), 201
 
 # photo_id로 이미지 파일 제공
-@app.route('/api/photo/<photo_id>', methods=['GET'])
-def get_photo(photo_id):
-    if 'user_id' not in session:
-        return jsonify({"message": "Unauthorized access"}), 401
+# @app.route('/api/photo/<photo_id>', methods=['GET'])
+# def get_photo(photo_id):
+#     if 'user_id' not in session:
+#         return jsonify({"message": "Unauthorized access"}), 401
     
-    photo = photos_collection.find_one({"_id": ObjectId(photo_id)})
-    if not photo:
-        return jsonify({"message": "Photo not found"}), 404
+#     photo = photos_collection.find_one({"_id": ObjectId(photo_id)})
+#     if not photo:
+#         return jsonify({"message": "Photo not found"}), 404
 
-    file_id = photo['file_id']
-    image_data = fs.get(file_id)
+#     file_id = photo['file_id']
+#     image_data = fs.get(file_id)
 
-    return send_file(io.BytesIO(image_data.read()), mimetype=image_data.content_type, download_name=image_data.filename)
+#     return send_file(io.BytesIO(image_data.read()), mimetype=image_data.content_type, download_name=image_data.filename)
 
 # 키워드로 사진 검색
 @app.route('/api/photos/search', methods=['GET'])
@@ -213,8 +211,13 @@ def search_photos():
 # 사진 수정 (로그인 사용자만)
 @app.route('/api/photos/<photo_id>', methods=['PUT'])
 def update_photo(photo_id):
-    if 'user_id' not in session:
+    user_id = signIn_as(access_type)
+
+    if not user_id:
         return jsonify({"message": "Unauthorized access"}), 401
+    
+    # if 'user_id' not in session:
+    #     return jsonify({"message": "Unauthorized access"}), 401
 
     data = request.get_json()
     photo = photos_collection.find_one({"_id": ObjectId(photo_id), "user_id": session['user_id']})
