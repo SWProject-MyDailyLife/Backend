@@ -113,8 +113,9 @@ def get_users():
 #     return jsonify(photos), 200
 
 # 사용자 사진 조회 (로그인 사용자만)
-@app.route('/api/photos/<user_id>', methods=['GET'])
-def get_photos(user_id):
+@app.route('/api/photos', methods=['GET'])
+def get_photos():
+    user_id = request.args.get('user_id')
     # user_id = session.get('user_id')
     # print(session)
     # session_id = request.headers.get('Session-Id')
