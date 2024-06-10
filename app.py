@@ -114,8 +114,10 @@ def get_photos():
     print(session)
     # user_id = session.get('user_id')
     
-    if not user_id:
-    # if 'user_id' not in session:
+    # if not user_id:
+    # # if 'user_id' not in session:
+    #     return jsonify({"message": "Unauthorized access"}), 401
+    if 'user_id' not in session:
         return jsonify({"message": "Unauthorized access"}), 401
     
     photos = list(photos_collection.find({}, {"_id": 1, "photo_url": 1, "description": 1, "keywords": 1, "user_id": 1}))
