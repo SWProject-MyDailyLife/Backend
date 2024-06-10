@@ -8,12 +8,11 @@ import os
 import io
 import gridfs
 from flask_session import Session
-import redis
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 bcrypt = Bcrypt(app)
-CORS(app, supports_credentials=True, origins=["http://localhost:3000"])
+CORS(app, supports_credentials=True, origins=["*"])
 
 client = MongoClient('mongodb+srv://bsb1203:qxzdozhOGmOFUdLN@cluster0.cj1vuyu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
 db = client['Photo_Diary']
@@ -109,8 +108,9 @@ def get_photos():
     # print(session)
     # session_id = request.headers.get('Session-Id')
     # print(f"Session ID from request: {session_id}")
+    print(request.headers)
     user_id = request.headers.get('user_id')
-    print(f"Session ID from request: {user_id}")
+    print(f"user ID from request: {user_id}")
     print(session)
     # user_id = session.get('user_id')
     
