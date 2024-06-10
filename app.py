@@ -16,14 +16,14 @@ bcrypt = Bcrypt(app)
 CORS(app, supports_credentials=True, origins=["*"])
 
 # Flask-Session 설정
-app.config['SESSION_TYPE'] = 'redis'
-app.config['SESSION_PERMANENT'] = False
-app.config['SESSION_USE_SIGNER'] = True
-app.config['SESSION_KEY_PREFIX'] = 'session:'
-app.config['SESSION_REDIS'] = redis.StrictRedis(host='localhost', port=6379)
+# app.config['SESSION_TYPE'] = 'redis'
+# app.config['SESSION_PERMANENT'] = False
+# app.config['SESSION_USE_SIGNER'] = True
+# app.config['SESSION_KEY_PREFIX'] = 'session:'
+# app.config['SESSION_REDIS'] = redis.StrictRedis(host='localhost', port=6379)
 
-# 세션 설정 초기화
-Session(app)
+# # 세션 설정 초기화
+# Session(app)
 
 client = MongoClient('mongodb+srv://bsb1203:qxzdozhOGmOFUdLN@cluster0.cj1vuyu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
 db = client['Photo_Diary']
@@ -115,30 +115,41 @@ def get_users():
 # 사용자 사진 조회 (로그인 사용자만)
 @app.route('/api/photos', methods=['GET'])
 def get_photos():
-    user_id = request.args.get('user_id')
+    # user_id = request.args.get('user_id')
     # user_id = session.get('user_id')
     # print(session)
     # session_id = request.headers.get('Session-Id')
     # print(f"Session ID from request: {session_id}")
     # print(request.headers)
-    # user_id = request.headers.get('user_id')
+    user_id = request.headers.get('user_id')
     print(f"user ID from request: {user_id}")
     # print(session)
     # user_id = session.get('user_id')
     
+    # if 'user_id' not in session:
+        # return jsonify({"message": "Unauthorized access"}), 401
     if not user_id:
         return jsonify({"message": "Unauthorized access"}), 401
     # if 'user_id' not in session:
-    #     return jsonify({"message": "Unauthorized access"}), 401
-    # if 'user_id' not in session:
+    print('ok')
     
-    photos = list(photos_collection.find({}, {"_id": 1, "photo_url": 1, "description": 1, "keywords": 1, "user_id": 1}))
+    photos = list(photos_collection.find({}, {"_id": 1, "keywords": 1, "user_id": 1, "file_id": 1}))
+    result = []
     for photo in photos:
-        photo['_id'] = str(photo['_id'])
-        # keywords 필드가 배열인지 확인하고, 아니라면 빈 배열로 초기화
-        if 'keywords' not in photo or not isinstance(photo['keywords'], list):
-            photo['keywords'] = []
-    return jsonify(photos), 200
+        photo_data = {
+            "_id": str(photo["_id"]),
+            "photo_url": photo.get("photo_url"),
+            "description": photo.get("description"),
+            "keywords": photo.get("keywords", []),
+            "user_id": photo.get("user_id")
+        }
+        file_id = photo.get("file_id")
+        if file_id:
+            image_data = fs.get(file_id).read()
+            photo_data["image"] = image_data.decode('latin1')  # 이미지 데이터를 인코딩하여 반환
+        result.append(photo_data)
+
+    return jsonify(result), 200
 
 # 사진 업로드 (로그인 사용자만)
 @app.route('/api/photos', methods=['POST'])
