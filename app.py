@@ -265,18 +265,22 @@ def get_messages():
         {"$group": {
             "_id": "$conversation",
             "message_id": {"$first": "$_id"},
-            "from_user_id": {"$first": "$from_user_id"},
-            "to_user_id": {"$first": "$to_user_id"},
+            "conversation": {"$first": "$conversation"},
             "message": {"$first": "$message"},
-            "created_at": {"$first": "$created_at"}
         }},
         {"$project": {
             "_id": "$message_id",
-            "conversation_id": "$_id",
-            "from_user_id": 1,
-            "to_user_id": 1,
             "message": 1,
-            "created_at": 1
+            "to_user_id": {
+                "$arrayElemAt": [
+                    {"$filter": {
+                        "input": "$conversation",
+                        "as": "user",
+                        "cond": {"$ne": ["$$user", user_id]}
+                    }},
+                    0
+                ]
+            }
         }}
     ]
 
