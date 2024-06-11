@@ -178,10 +178,10 @@ def upload_photo():
 # 키워드로 사진 검색
 @app.route('/api/photos/search', methods=['GET'])
 def search_photos():
-    user_id = signIn_as(access_type)
+    # user_id = signIn_as(access_type)
 
-    if not user_id:
-        return jsonify({"message": "Unauthorized access"}), 401
+    # if not user_id:
+    #     return jsonify({"message": "Unauthorized access"}), 401
     
     keyword = request.args.get('keyword')
     if not keyword:
@@ -259,7 +259,6 @@ def get_messages():
     if not user_id:
         return jsonify({"message": "Unauthorized access"}), 401
     
-    
     pipeline = [
         {"$match": {"conversation": user_id}},
         {"$sort": {"created_at": -1}},
@@ -274,6 +273,7 @@ def get_messages():
         }},
         {"$project": {
             "_id": "$message_id",
+            "conversation_id": "$_id",
             "from_user_id": 1,
             "to_user_id": 1,
             "photo_id": 1,
@@ -291,6 +291,28 @@ def get_messages():
 
     return jsonify(messages), 200
 
+# 특정 채팅방의 전체 메시지 조회 (로그인 사용자만)
+@app.route('/api/messages/conversation', methods=['GET'])
+def get_conversation_messages():
+    user_id = signIn_as(access_type)
+
+    if not user_id:
+        return jsonify({"message": "Unauthorized access"}), 401
+
+    # 쿼리 매개변수에서 other_user_id 가져오기
+    other_user_id = request.args.get('other_user_id')
+    if not other_user_id:
+        return jsonify({"message": "other_user_id is required"}), 400
+
+    conversation = [user_id, other_user_id]
+    messages = list(messages_collection.find({"conversation": {"$all": conversation}}).sort("created_at", 1))
+    
+    for message in messages:
+        message['_id'] = str(message['_id'])
+        message['photo_id'] = str(message['photo_id'])
+
+    return jsonify(messages), 200
+
 # # 모든 메시지 삭제 (테스트용)
 # @app.route('/api/messages/delete_all', methods=['DELETE'])
 # def delete_all_messages():
@@ -300,10 +322,14 @@ def get_messages():
 # 메시지 삭제 (로그인 사용자만)
 @app.route('/api/messages/<message_id>', methods=['DELETE'])
 def delete_message(message_id):
-    if 'user_id' not in session:
-        return jsonify({"message": "Unauthorized access"}), 401
+    user_id = signIn_as(access_type)
 
-    result = messages_collection.delete_one({"_id": ObjectId(message_id), "to_user_id": session['user_id']})
+    if not user_id:
+        return jsonify({"message": "Unauthorized access"}), 401
+    # if 'user_id' not in session:
+    #     return jsonify({"message": "Unauthorized access"}), 401
+
+    result = messages_collection.delete_one({"_id": ObjectId(message_id), "to_user_id": user_id})
     if result.deleted_count == 1:
         return jsonify({"message": "Message deleted successfully"}), 200
     else:
