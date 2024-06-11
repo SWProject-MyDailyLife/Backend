@@ -120,7 +120,6 @@ def get_photos():
     for photo in photos:
         photo_data = {
             "_id": str(photo["_id"]),
-            "photo_url": photo.get("photo_url"),
             "keywords": photo.get("keywords", []),
             "user_id": photo.get("user_id")
         }
@@ -194,7 +193,6 @@ def search_photos():
     for photo in photos:
         photo_data = {
             "_id": str(photo["_id"]),
-            "photo_url": photo.get("photo_url"),
             "keywords": photo.get("keywords", []),
             "user_id": photo.get("user_id")
         }
