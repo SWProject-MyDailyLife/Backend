@@ -191,21 +191,30 @@ def upload_photo():
 # 키워드로 사진 검색
 @app.route('/api/photos/search', methods=['GET'])
 def search_photos():
+    user_id = signIn_as(access_type)
+
+    if not user_id:
+        return jsonify({"message": "Unauthorized access"}), 401
+    
     keyword = request.args.get('keyword')
     if not keyword:
         return jsonify({"message": "Keyword is required"}), 400
 
-    photos = list(photos_collection.find({"keywords": {"$regex": keyword, "$options": "i"}}, {"_id": 1, "description": 1, "keywords": 1, "user_id": 1}))
+    photos = list(photos_collection.find({"keywords": {"$regex": keyword, "$options": "i"}}, {"_id": 1, "keywords": 1, "user_id": 1, "file_id": 1}))
     
     results = []
     for photo in photos:
-        photo_id = photo['_id']
-        results.append({
-            "_id": str(photo_id),
-            "description": photo['description'],
-            "keywords": photo['keywords'],
-            "user_id": photo['user_id']
-        })
+        photo_data = {
+            "_id": str(photo["_id"]),
+            "keywords": photo.get("keywords", []),
+            "user_id": photo.get("user_id")
+        }
+        file_id = photo.get("file_id")
+        if file_id:
+            image_data = fs.get(file_id).read()
+            photo_data["image"] = image_data.decode('latin1')
+        results.append(photo_data)
+    
     return jsonify(results), 200
 
 # 사진 수정 (로그인 사용자만)
@@ -234,8 +243,12 @@ def update_photo(photo_id):
 # 메시지 전송 (로그인 사용자만)
 @app.route('/api/messages', methods=['POST'])
 def send_message():
-    if 'user_id' not in session:
+    user_id = signIn_as(access_type)
+
+    if not user_id:
         return jsonify({"message": "Unauthorized access"}), 401
+    # if 'user_id' not in session:
+    #     return jsonify({"message": "Unauthorized access"}), 401
 
     data = request.get_json()
     message = {
