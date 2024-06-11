@@ -199,7 +199,8 @@ def search_photos():
         file_id = photo.get("file_id")
         if file_id:
             image_data = fs.get(file_id).read()
-            photo_data["image"] = image_data.decode('latin1')
+            base64_image = base64.b64encode(image_data).decode('utf-8')
+            photo_data["photo_url"] = f"data:image/jpeg;base64,{base64_image}"
         results.append(photo_data)
     
     return jsonify(results), 200
@@ -244,25 +245,57 @@ def send_message():
         "photo_id": data['photo_id'],
         "message": data['message'],
         "created_at": datetime.datetime.now(),
-        "updated_at": datetime.datetime.now()
+        "updated_at": datetime.datetime.now(),
+        "conversation": sorted([user_id, data['to_user_id']])
     }
     messages_collection.insert_one(message)
     return jsonify({"message": "Message sent successfully"}), 201
 
-# 받은 메시지 조회 (로그인 사용자만)
+# 미리보기 메시지 조회 (로그인 사용자만)
 @app.route('/api/messages', methods=['GET'])
 def get_messages():
     user_id = signIn_as(access_type)
 
     if not user_id:
         return jsonify({"message": "Unauthorized access"}), 401
+    
+    
+    pipeline = [
+        {"$match": {"conversation": user_id}},
+        {"$sort": {"created_at": -1}},
+        {"$group": {
+            "_id": "$conversation",
+            "message_id": {"$first": "$_id"},
+            "from_user_id": {"$first": "$from_user_id"},
+            "to_user_id": {"$first": "$to_user_id"},
+            "photo_id": {"$first": "$photo_id"},
+            "message": {"$first": "$message"},
+            "created_at": {"$first": "$created_at"}
+        }},
+        {"$project": {
+            "_id": "$message_id",
+            "from_user_id": 1,
+            "to_user_id": 1,
+            "photo_id": 1,
+            "message": 1,
+            "created_at": 1
+        }}
+    ]
 
-    messages = list(messages_collection.find({"to_user_id": user_id}, {"_id": 1, "from_user_id": 1, "photo_id": 1, "message": 1, "created_at": 1}))
+    messages = list(messages_collection.aggregate(pipeline))
+
     # ObjectId를 문자열로 변환
     for message in messages:
         message['_id'] = str(message['_id'])
         message['photo_id'] = str(message['photo_id'])
+
     return jsonify(messages), 200
+
+# # 모든 메시지 삭제 (테스트용)
+# @app.route('/api/messages/delete_all', methods=['DELETE'])
+# def delete_all_messages():
+#     messages_collection.delete_many({})
+#     return jsonify({"message": "All messages deleted successfully"}), 200
 
 # 메시지 삭제 (로그인 사용자만)
 @app.route('/api/messages/<message_id>', methods=['DELETE'])
@@ -277,4 +310,4 @@ def delete_message(message_id):
         return jsonify({"message": "Message not found or unauthorized"}), 404
 
 if __name__ == '__main__':
-    app.run(debug=True, host='localhost', port='5000')
+    app.run(debug=True, host='127.0.0.1', port='5000')
