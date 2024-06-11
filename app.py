@@ -8,7 +8,7 @@ import os
 import io
 import gridfs
 from flask_session import Session
-import redis
+import base64
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
@@ -70,18 +70,6 @@ def login():
     else:
         return jsonify({"message": "Invalid credentials"}), 401
 
-############테스트
-# 로그인
-# @app.route('/api/login', methods=['POST'])
-# def login():
-#     data = request.get_json()
-#     user = users_collection.find_one({"user_id": data['user_id']})
-#     if user and bcrypt.check_password_hash(user['password'], data['password']):
-#         session['user_id'] = user['user_id']
-#         return jsonify({"message": "Login successful", "user_id": user['user_id'], "session_id": session['user_id']}), 200
-#     else:
-#         return jsonify({"message": "Invalid credentials"}), 401
-
 # 로그아웃
 @app.route('/api/logout', methods=['POST'])
 def logout():
@@ -133,7 +121,6 @@ def get_photos():
         photo_data = {
             "_id": str(photo["_id"]),
             "photo_url": photo.get("photo_url"),
-            "description": photo.get("description"),
             "keywords": photo.get("keywords", []),
             "user_id": photo.get("user_id")
         }
@@ -152,19 +139,20 @@ def upload_photo():
 
     if not user_id:
         return jsonify({"message": "Unauthorized access"}), 401
-    # if 'user_id' not in session:
-    #     return jsonify({"message": "Unauthorized access"}), 401
 
-    keyword = request.form["keyword"]
-    image = request.files["image"]
+    data = request.get_json()
+    image = data.get("image")
+    keywords = data.get("keywords")
 
-    # 이미지 파일을 GridFS에 저장
-    fs_id = fs.put(image, filename=image.filename, content_type=image.content_type)
+    if not image or not keywords:
+        return jsonify({"message": "Image and keywords are required"}), 400
 
-    # DB에 저장
+    image_data = base64.b64decode(image.split(",")[1])
+    fs_id = fs.put(image_data, content_type="image/jpeg")
+
     photo = {
         "user_id": user_id,
-        "keywords": keyword,
+        "keywords": keywords,
         "file_id": fs_id,
         "created_at": datetime.datetime.now(),
         "updated_at": datetime.datetime.now()
@@ -206,6 +194,7 @@ def search_photos():
     for photo in photos:
         photo_data = {
             "_id": str(photo["_id"]),
+            "photo_url": photo.get("photo_url"),
             "keywords": photo.get("keywords", []),
             "user_id": photo.get("user_id")
         }
@@ -252,7 +241,7 @@ def send_message():
 
     data = request.get_json()
     message = {
-        "from_user_id": session['user_id'],
+        "from_user_id": user_id,
         "to_user_id": data['to_user_id'],
         "photo_id": data['photo_id'],
         "message": data['message'],
@@ -265,10 +254,12 @@ def send_message():
 # 받은 메시지 조회 (로그인 사용자만)
 @app.route('/api/messages', methods=['GET'])
 def get_messages():
-    if 'user_id' not in session:
+    user_id = signIn_as(access_type)
+
+    if not user_id:
         return jsonify({"message": "Unauthorized access"}), 401
 
-    messages = list(messages_collection.find({"to_user_id": session['user_id']}, {"_id": 1, "from_user_id": 1, "photo_id": 1, "message": 1, "created_at": 1}))
+    messages = list(messages_collection.find({"to_user_id": user_id}, {"_id": 1, "from_user_id": 1, "photo_id": 1, "message": 1, "created_at": 1}))
     # ObjectId를 문자열로 변환
     for message in messages:
         message['_id'] = str(message['_id'])
