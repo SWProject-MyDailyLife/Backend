@@ -134,12 +134,13 @@ def get_photos():
 # 사진 업로드 (로그인 사용자만)
 @app.route('/api/photos', methods=['POST'])
 def upload_photo():
-    user_id = signIn_as(access_type)
-
+    # user_id = signIn_as(access_type)
+    
+    data = request.get_json()
+    user_id = data.get("user_id")
     if not user_id:
         return jsonify({"message": "Unauthorized access"}), 401
 
-    data = request.get_json()
     image = data.get("image")
     keywords = data.get("keywords")
 
