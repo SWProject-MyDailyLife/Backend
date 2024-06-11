@@ -163,7 +163,7 @@ def upload_photo():
 
     # DB에 저장
     photo = {
-        "user_id": session['user_id'],
+        "user_id": user_id,
         "keywords": keyword,
         "file_id": fs_id,
         "created_at": datetime.datetime.now(),
