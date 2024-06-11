@@ -135,7 +135,7 @@ def get_photos():
 @app.route('/api/photos', methods=['POST'])
 def upload_photo():
     # user_id = signIn_as(access_type)
-    
+
     data = request.get_json()
     user_id = data.get("user_id")
     if not user_id:
@@ -209,16 +209,16 @@ def search_photos():
 # 사진 수정 (로그인 사용자만)
 @app.route('/api/photos/<photo_id>', methods=['PUT'])
 def update_photo(photo_id):
-    user_id = signIn_as(access_type)
 
+    data = request.get_json()
+    user_id = data.get("user_id")
     if not user_id:
         return jsonify({"message": "Unauthorized access"}), 401
     
     # if 'user_id' not in session:
     #     return jsonify({"message": "Unauthorized access"}), 401
 
-    data = request.get_json()
-    photo = photos_collection.find_one({"_id": ObjectId(photo_id), "user_id": session['user_id']})
+    photo = photos_collection.find_one({"_id": ObjectId(photo_id), "user_id": user_id})
     
     if not photo:
         return jsonify({"message": "Photo not found or unauthorized"}), 404
@@ -232,18 +232,17 @@ def update_photo(photo_id):
 # 메시지 전송 (로그인 사용자만)
 @app.route('/api/messages', methods=['POST'])
 def send_message():
-    user_id = signIn_as(access_type)
 
+    data = request.get_json()
+    user_id = data.get("user_id")
     if not user_id:
         return jsonify({"message": "Unauthorized access"}), 401
     # if 'user_id' not in session:
     #     return jsonify({"message": "Unauthorized access"}), 401
 
-    data = request.get_json()
     message = {
         "from_user_id": user_id,
         "to_user_id": data['to_user_id'],
-        "photo_id": data['photo_id'],
         "message": data['message'],
         "created_at": datetime.datetime.now(),
         "updated_at": datetime.datetime.now(),
@@ -268,7 +267,6 @@ def get_messages():
             "message_id": {"$first": "$_id"},
             "from_user_id": {"$first": "$from_user_id"},
             "to_user_id": {"$first": "$to_user_id"},
-            "photo_id": {"$first": "$photo_id"},
             "message": {"$first": "$message"},
             "created_at": {"$first": "$created_at"}
         }},
@@ -277,7 +275,6 @@ def get_messages():
             "conversation_id": "$_id",
             "from_user_id": 1,
             "to_user_id": 1,
-            "photo_id": 1,
             "message": 1,
             "created_at": 1
         }}
@@ -288,7 +285,6 @@ def get_messages():
     # ObjectId를 문자열로 변환
     for message in messages:
         message['_id'] = str(message['_id'])
-        message['photo_id'] = str(message['photo_id'])
 
     return jsonify(messages), 200
 
@@ -310,7 +306,6 @@ def get_conversation_messages():
     
     for message in messages:
         message['_id'] = str(message['_id'])
-        message['photo_id'] = str(message['photo_id'])
 
     return jsonify(messages), 200
 
