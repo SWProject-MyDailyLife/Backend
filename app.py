@@ -206,6 +206,7 @@ def search_photos():
     
     return jsonify(results), 200
 
+
 # 사진 수정 (로그인 사용자만)
 @app.route('/api/photos/<photo_id>', methods=['PUT'])
 def update_photo(photo_id):
@@ -251,6 +252,7 @@ def send_message():
     messages_collection.insert_one(message)
     return jsonify({"message": "Message sent successfully"}), 201
 
+
 # 미리보기 메시지 조회 (로그인 사용자만)
 @app.route('/api/messages', methods=['GET'])
 def get_messages():
@@ -285,6 +287,7 @@ def get_messages():
     ]
 
     messages = list(messages_collection.aggregate(pipeline))
+    # print(messages)
 
     # ObjectId를 문자열로 변환
     for message in messages:
@@ -310,6 +313,7 @@ def get_conversation_messages():
     
     for message in messages:
         message['_id'] = str(message['_id'])
+    print(messages)
 
     return jsonify(messages), 200
 
@@ -329,7 +333,7 @@ def delete_message(message_id):
     # if 'user_id' not in session:
     #     return jsonify({"message": "Unauthorized access"}), 401
 
-    result = messages_collection.delete_one({"_id": ObjectId(message_id), "to_user_id": user_id})
+    result = messages_collection.delete_one({"_id": ObjectId(message_id)})
     if result.deleted_count == 1:
         return jsonify({"message": "Message deleted successfully"}), 200
     else:
